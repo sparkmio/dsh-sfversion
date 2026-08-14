@@ -1,0 +1,7 @@
+# 在你的 dsh profile 补丁层插入 dsh-sfversion
+# 部署方式二选一:
+# 1) 把本文件内容合并进 profile 的 cordis.patch.yml;
+# 2) 启动时加 --patch 参数: dsh web --patch /path/to/dsh-sfversion/cordis.patch.yml
+- insert:
+    - id: dsh-sfversion
+      name: 'dsh-sfversion'

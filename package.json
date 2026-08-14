@@ -1,0 +1,45 @@
+{
+  "name": "dsh-sfversion",
+  "version": "1.0.0",
+  "description": "StepFun 视觉桥(step-3.7-flash):给纯文本模型装上眼睛——图片描述 + UI 还原,原生图片消息自动翻译",
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "vision",
+    "stepfun",
+    "multimodal",
+    "image"
+  ],
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-theme"
+      ],
+      "platform": "web"
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sparkmio/dsh-sfversion"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "react": "^18.2.0"
+  }
+}
