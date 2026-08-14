@@ -1,3 +1,5 @@
+![SF视觉桥 —— 给纯文本模型的 DeepSeek Harness 装上眼睛](index.png)
+
 # dsh-sfversion
 
 **SF视觉桥** —— 给纯文本模型的 DeepSeek Harness 装上眼睛。
