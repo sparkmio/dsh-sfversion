@@ -50,7 +50,10 @@ StepFun step-3.7-flash 生成:描述 + UI 还原 HTML
          name: 'dsh-sfversion'
    ```
 
-3. 配置 API Key(一次性):
+3. 配置 API Key(任选其一,一次性):
+
+   - 打开 Web 界面 → **设置 → StepFun 视觉** → 填写 API Key 与模型 → 保存;或
+   - 使用 DSH Credential:
 
    ```bash
    dsh credentials set STEPFUN_API_KEY sk-你的StepFun密钥
@@ -112,7 +115,7 @@ StepFun step-3.7-flash 生成:描述 + UI 还原 HTML
 - **点 ↑ 选图** → 图片进入输入框 → 打字按发送 → 一条消息发出,DeepSeek 自动获得描述 + 还原;
 - **直接粘贴/拖入**图片到输入框 → 同样自动翻译;
 - 让 Agent 分析工作区图片:`vision_glance <路径>`;按图还原 UI:`vision_restore_ui <路径>` → 保存为 `restored-ui.html`;
-- 设置 → **StepFun 视觉** 页面可查看配置与指引。
+- 设置 → **StepFun 视觉** 页面可填写 API Key / 模型(密钥为只写字段,保存后不会回显)。
 
 ## 默认配置
 
@@ -122,7 +125,7 @@ StepFun step-3.7-flash 生成:描述 + UI 还原 HTML
 | 接口 | `https://api.stepfun.com/v1` |
 | 推理强度 | `low` |
 | 最大输出 tokens | 3000 |
-| API Key | DSH Credential `STEPFUN_API_KEY` |
+| API Key | 设置页(优先)或 DSH Credential `STEPFUN_API_KEY` |
 
 ## 包结构
 
