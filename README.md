@@ -1,10 +1,8 @@
 # dsh-sfversion
 
-**StepFun 视觉桥(step-3.7-flash)** —— 给纯文本模型的 DeepSeek Harness 装上眼睛。
+**SF视觉桥** —— 给纯文本模型的 DeepSeek Harness 装上眼睛。
 
-`#dsh-plugin`
-
-图片先发给 StepFun 多模态模型转成文字,再把文字交给 DeepSeek 继续推理:自动生成 **图片描述 + UI 还原 HTML** 两段内容,在后台注入模型上下文——聊天记录里只显示图片本身,没有任何插件痕迹。
+图片先发给 StepFun 多模态模型转成文字,再把文字交给 DeepSeek 继续推理:自动生成 **图片描述 + UI 还原 HTML** 两段内容,在后台注入模型上下文——聊天记录里只显示图片本身,没有任何插件痕迹。项目的UI复原功能使用了[dsh-vision-toolkit](https://github.com/Anionex/dsh-vision-toolkit/tree/main)的部分功能。
 
 ## 特性
 
@@ -57,6 +55,55 @@ StepFun step-3.7-flash 生成:描述 + UI 还原 HTML
    ```
 
 4. 重启 `dsh web`。
+
+## 一键安装方法
+
+复制下面这段提示词给DeepSeek Harness：
+```
+把 GitHub 仓库 https://github.com/sparkmio/dsh-sfversion 里的插件安装到本机 DeepSeek Harness 上。请按以下步骤完整执行,并在每步完成后确认结果:
+
+1. **克隆源码**
+   - 执行 `git clone https://github.com/sparkmio/dsh-sfversion.git` 到一个本地目录(如 `~/dsh-sfversion`)。
+   - 该插件是一个零构建发行版 npm 包:宿主插件在 `lib/index.js`,浏览器插件 bundle 在 `lib/client.js`,不需要编译。
+
+2. **确定 profile 目录**
+   - 先执行 `echo $DSH_HOME`(Windows 为 `echo %USERPROFILE%\.dsh`),找到 DeepSeek Harness 的 home 目录。
+   - 当前使用的 profile 位于 `$DSH_HOME/profiles/<profile 名>/`(通常为 `web`)。以该目录下存在 `cordis.yml` 和 `cordis.patch.yml` 为准。
+
+3. **把插件包安装进 profile 的 node_modules**
+   - 目标路径:`$DSH_HOME/profiles/node_modules/dsh-sfversion`(注意是 `profiles` 下的 node_modules,不是 `profiles/<profile>` 下的)。
+   - 推荐用符号链接/junction 挂接源码目录,便于后续更新;直接复制整个目录也可以。
+   - 完成后确认 `lib/index.js`、`lib/client.js`、`package.json` 三个文件都存在于目标路径。
+
+4. **写入插件行**
+   - 编辑 `$DSH_HOME/profiles/<profile>/cordis.patch.yml`(若不存在则创建),追加以下内容(保留已有内容,不要覆盖):
+
+     ```yaml
+     - insert:
+         - id: dsh-sfversion
+           name: 'dsh-sfversion'
+     ```
+
+   - 确认 YAML 缩进正确、顶层是数组。
+
+5. **配置 API Key(一次性)**
+   - 执行 `dsh credentials set STEPFUN_API_KEY <你的 StepFun API Key>`。
+   - Key 可在 https://platform.stepfun.com 获取;插件默认调用 `step-3.7-flash` 模型。
+
+6. **重启并验证**
+   - 完全重启 DeepSeek Harness(如 `dsh web`,先 Ctrl+C 停掉再重新启动)。
+   - 验证标准(按优先级):
+     a. 启动日志无 `dsh-sfversion` 相关的报错或 "did not activate" 提示;
+     b. 浏览器输入框左侧出现一个向上的箭头(↑)按钮,选图后图片作为附件进入输入框;
+     c. 设置页出现「StepFun 视觉」条目;
+     d. Agent 的工具列表中出现 `vision_glance` 和 `vision_restore_ui` 两个工具。
+
+7. **失败处理**
+   - 若启动报错,把完整日志保留并逐条排查:常见原因是插件行写错位置、包路径未解析(检查第 3 步的目录层级)、或 `STEPFUN_API_KEY` 未设置(第 5 步)。
+   - 插件行为说明:上传/粘贴的图片以原生图片消息发送,聊天里只显示图片;DeepSeek 会在后台自动获得「图片描述 + UI 还原 HTML」,无需任何额外操作。
+
+最后汇报:每步的执行结果、profile 的实际路径、以及验证标准 a–d 的通过情况。
+```
 
 ## 使用
 
