@@ -12,7 +12,7 @@
 - **官方视觉翻译桥**:实现宿主 `visionTranslation` 服务——输入框直接**粘贴/拖入**的图片、`read_image` 工具读出的图片,在模型请求前自动替换为「描述 + UI 还原」两段干净文字,持久化历史保留原图;
 - **UI 还原**:每张图都会同时生成可保存的完整 HTML/CSS 还原(内联样式、无外部资源、逐字保留可见文字);
 - **模型工具**:`vision_glance`(描述/OCR)、`vision_restore_ui`(还原为 HTML 文件);
-- **结果缓存**:按图片内容哈希缓存到工作区 `.dsh-sfversion-cache.json`,重复图片不重复调用模型;
+- **结果缓存**:按图片内容哈希、识别模式、模型和附加问题缓存到工作区 `.dsh-sfversion-cache.json`,重复请求不重复调用模型;
 - **稳健性**:503/429/超时/网络抖动自动重试;推理模型的思考过程绝不泄漏给 DeepSeek;大图(>5MB)浏览器内自动压缩。
 
 ## 关于模型
@@ -41,10 +41,10 @@ StepFun step-3.7-flash 生成:描述 + UI 还原 HTML
 
    ```bash
    # 方式 A:复制到 profile 的 node_modules
-   cp -r dsh-sfversion "$DSH_HOME/profiles/web/node_modules/dsh-sfversion"
+   cp -r dsh-sfversion "$DSH_HOME/profiles/node_modules/dsh-sfversion"
 
    # 方式 B(开发):符号链接
-   ln -s /path/to/dsh-sfversion "$DSH_HOME/profiles/web/node_modules/dsh-sfversion"
+   ln -s /path/to/dsh-sfversion "$DSH_HOME/profiles/node_modules/dsh-sfversion"
    ```
 
 2. 在 profile 的 `cordis.patch.yml` 里插入插件行(或启动加 `--patch`):
