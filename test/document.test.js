@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
+import { deflateSync } from 'node:zlib'
 import { zipSync, strToU8 } from 'fflate'
 import * as XLSX from 'xlsx'
 import { documentType, supportedDocument, parseDocument } from '../lib/document.js'
+import { classifyVisionMode } from '../lib/index.js'
 
 const bytes = (value) => new TextEncoder().encode(value)
 
@@ -25,6 +27,64 @@ const xlsDoc = await parseDocument({ bytes: new Uint8Array(xls), name: 'table.xl
 assert.equal(xlsDoc.type, 'xls')
 assert.ok(xlsDoc.blocks.some((block) => block.text === '兼容格式' && block.location.sheet === '数据' && block.location.cell === 'A2'))
 assert.ok(xlsDoc.blocks.some((block) => block.text === '42' && block.location.cell === 'B2'))
+
+const docxTable = zipSync({
+  'word/document.xml': strToU8('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t>cell</w:t></w:r><w:r><w:drawing><a:blip r:embed="rId5"/></w:drawing></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>'),
+  'word/_rels/document.xml.rels': strToU8('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId5" Target="media/image1.png" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"/></Relationships>'),
+  'word/media/image1.png': new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+})
+const docxTableDoc = await parseDocument({ bytes: docxTable, name: 'table-image.docx' })
+assert.ok(docxTableDoc.blocks.some((block) => block.type === 'text' && block.text === 'cell' && block.location.kind === 'table-cell'))
+assert.ok(docxTableDoc.blocks.some((block) => block.type === 'image' && block.location.kind === 'table-cell-anchor' && block.location.row === 1 && block.location.col === 1))
+
+function makeImagePdf() {
+  const compressed = deflateSync(Uint8Array.from([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0]))
+  const encoder = new TextEncoder()
+  const objects = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n',
+    null,
+    '5 0 obj\n<< /Length 37 >>\nstream\nq 100 0 0 100 20 20 cm /Im1 Do Q\nendstream\nendobj\n',
+  ]
+  const imageObject = new Uint8Array([...encoder.encode('4 0 obj\n<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ' + compressed.length + ' >>\nstream\n'), ...compressed, ...encoder.encode('\nendstream\nendobj\n')])
+  let out = encoder.encode('%PDF-1.4\n')
+  const offsets = [0]
+  const append = (part) => { offsets.push(out.length); out = new Uint8Array([...out, ...part]) }
+  for (let i = 0; i < objects.length; i++) append(i === 3 ? imageObject : encoder.encode(objects[i]))
+  const xref = out.length
+  let tail = 'xref\n0 ' + (objects.length + 1) + '\n0000000000 65535 f \n'
+  for (let i = 1; i < offsets.length; i++) tail += String(offsets[i]).padStart(10, '0') + ' 00000 n \n'
+  tail += 'trailer\n<< /Size ' + (objects.length + 1) + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n'
+  return new Uint8Array([...out, ...encoder.encode(tail)])
+}
+const pdfDoc = await parseDocument({ bytes: makeImagePdf(), name: 'scan.pdf' })
+assert.ok(pdfDoc.blocks.some((block) => block.type === 'image' && block.location.page === 1 && block.bytes.length > 8))
+
+function makeScanPdf() {
+  const encoder = new TextEncoder()
+  const objects = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R >>\nendobj\n',
+    '4 0 obj\n<< /Length 0 >>\nstream\n\nendstream\nendobj\n',
+  ]
+  let out = encoder.encode('%PDF-1.4\n')
+  const offsets = [0]
+  for (const object of objects) { offsets.push(out.length); out = new Uint8Array([...out, ...encoder.encode(object)]) }
+  const xref = out.length
+  let tail = 'xref\n0 5\n0000000000 65535 f \n'
+  for (let i = 1; i < offsets.length; i++) tail += String(offsets[i]).padStart(10, '0') + ' 00000 n \n'
+  tail += 'trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n'
+  return new Uint8Array([...out, ...encoder.encode(tail)])
+}
+const scanPdfDoc = await parseDocument({ bytes: makeScanPdf(), name: 'scanned.pdf' })
+assert.ok(scanPdfDoc.blocks.some((block) => block.type === 'image' && block.source === 'pdf-rendered-page' && block.location.kind === 'pdf-rendered-page' && block.bytes.length > 100))
+assert.ok(scanPdfDoc.blocks.some((block) => block.type === 'text' && block.text.includes('已自动渲染整页')))
+
+assert.deepEqual(classifyVisionMode('网页中红色按钮在哪里'), { describe: false, ground: true, restore: false })
+assert.deepEqual(classifyVisionMode('请还原这个网页'), { describe: true, ground: false, restore: true })
+assert.deepEqual(classifyVisionMode('红色按钮位于左上角吗'), { describe: false, ground: true, restore: false })
 
 const jsonXmind = zipSync({
   'content.json': strToU8(JSON.stringify({ sheets: [{ title: '产品', rootTopic: { title: '中心', children: { attached: [{ title: '需求', notes: { plain: { content: '备注内容' } } }] } } }] })),
@@ -55,5 +115,6 @@ assert.ok(client.includes('conversation.input'))
 assert.ok(client.includes('resolver.for(sessionCtx)'))
 assert.ok(client.includes('sessionInput.insertReference'))
 assert.ok(client.includes('sessionInput.addImages'))
+assert.ok(client.includes('inputActions.addImages([sendFile])'))
 
 console.log('document smoke tests passed')

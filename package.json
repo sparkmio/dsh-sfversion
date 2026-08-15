@@ -1,6 +1,6 @@
 {
   "name": "dsh-sfversion",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "按需视觉桥：图片描述、空间定位与 UI 还原，支持 OpenAI Chat Completions 兼容多模态接口",
   "keywords": [
     "deepseek-harness",
@@ -52,10 +52,14 @@
     "@deepseek-ai/dsh-client-ui-input-trigger": "*"
   },
   "dependencies": {
+    "@napi-rs/canvas": "1.0.6",
     "cfb": "^1.2.2",
     "fflate": "^0.8.3",
     "pdfjs-dist": "^6.2.108",
     "word-extractor": "^1.0.4",
     "xlsx": "^0.18.5"
+  },
+  "scripts": {
+    "test": "node test/document.test.js"
   }
 }
