@@ -6,7 +6,7 @@
 
 ## 特性
 
-- **图片与文档上传**：输入框左侧 ↑ 支持 png/jpeg/webp/gif 图片和 docx/pptx/xlsx/pdf/md/markdown 文档；图片走原生附件，文档以受控传输标记进入宿主后解析；
+- **图片与文档上传**：输入框左侧 ↑ 支持 png/jpeg/webp/gif 图片和 doc/docx/ppt/pptx/xls/xlsx/xmind/pdf/md/markdown 文档；图片走原生附件，文档走输入引用和宿主 RPC 解析；
 - **原生图片体验**：输入框左侧 ↑ 按钮把图片作为原生草稿附件加入输入框，与文字一起发送；直接粘贴/拖入图片也支持；
 - **按意图识别**：普通问题使用描述/OCR；出现“哪里、位置、左上、附近、坐标”等空间问题时使用独立定位链路；明确要求网页、HTML、UI 复刻时才生成 HTML；
 - **空间定位**：`vision_ground` 返回目标 `bbox`、中心点、0～1000 归一化坐标、九宫格区域、OCR 文字和相对关系，适合复杂图片中的“某元素大概在哪里”；
@@ -23,11 +23,16 @@
 
 | 格式 | 原文文字 | 内嵌图片 | 位置精度 |
 |---|---|---|---|
+| `.doc` | 正文、页眉页脚、脚注/批注（若解析器提供） | 旧版二进制 DOC 暂不保证可靠提取 | 仅文档顺序，不伪造页码/坐标 |
 | `.docx` | 段落、表格单元格 | `word/media` 图片 | 段落/表格锚点；DOCX XML 本身不保证真实分页 |
 | `.pptx` | 文本框、形状文字 | 幻灯片图片 | 幻灯片 + 0～1000 归一化形状坐标 |
+| `.xls` | Sheet、单元格、公式 | 旧版 XLS 内嵌图片不保证可靠提取 | Sheet + 单元格 |
 | `.xlsx` | Sheet、单元格、共享字符串 | drawing 图片 | Sheet + 单元格/图片覆盖范围 |
 | `.pdf` | PDF.js 文字层（含页码和文字 bbox） | 可提取的嵌入式栅格图片会转为 PNG；扫描整页仍依赖渲染适配器 | 页码/文字/嵌入图片 bbox；扫描页会保留“无文字层”提示 |
+| `.xmind` | `content.json` / `content.xml` 主题、备注 | 过滤 `attachments/`、缩略图等资源，避免误当正文 | 主题树路径，例如“中心主题 > 分支” |
 | `.md` / `.markdown` | Markdown 原文、标题、列表、代码块 | `data:image/...` 图片；相对路径图片当前保留引用 | 行号/文档顺序 |
+
+旧版 `.doc/.ppt/.xls` 的定位精度低于 OOXML；XMind 的“位置”是主题树路径而不是像素坐标。旧版二进制 Office 的内嵌图片提取能力有限，若必须识别其中图片，建议另存为 `.docx/.pptx/.xlsx` 或 PDF。
 
 处理时不会把文档简单拼成一段无序文本，而是生成四层上下文：
 
@@ -36,7 +41,7 @@
 3. **位置层**：每个文字块和图片都带页码、段落、幻灯片、Sheet、单元格、图片范围或 bbox；
 4. **位置约束**：明确告诉 DeepSeek 图片 OCR 不是正文，禁止跨页/跨图片/跨 Sheet 混合内容。
 
-客户端目前的宿主输入契约只提供原生图片附件接口，因此文档会先以受控的 `SFV_DOCUMENT_V1` 传输块进入宿主；宿主解析后会在发送给 DeepSeek 前移除该传输块，不会把 base64 当成用户问题。单个文档限制为 **25MB**。PDF 中可直接提取的嵌入式栅格图片会单独送入图片识别链路；整页扫描 PDF 没有文字层，也没有可分离的图片对象时，仍需在部署环境提供 PDF 页面渲染/OCR 适配器。普通 PDF 文字层不需要视觉模型。
+文档上传后，输入框只保留一个文件引用占位符并显示文件名 chip；原始字节只保存在当前浏览器内存，发送时由输入引用 serializer 通过一次宿主 Connection RPC 交给解析器，文字和图片上下文随后才发给 DeepSeek。因此不会再把 `[[SFV_DOCUMENT_V1 ...]]` 或 Base64 填进输入框，也不会让 Base64 进入会话历史。旧版客户端/已有历史中的 `SFV_DOCUMENT_V1` 仍保留兼容解析。单个文档限制为 **25MB**。PDF 中可直接提取的嵌入式栅格图片会单独送入图片识别链路；整页扫描 PDF 没有文字层，也没有可分离的图片对象时，仍需在部署环境提供 PDF 页面渲染/OCR 适配器。普通 PDF 文字层不需要视觉模型。
 
 ## 为什么不再为每张图片生成 HTML
 
@@ -114,7 +119,7 @@
 - 点 ↑ 选图，输入问题后发送；系统会根据问题自动选择识别模式；
 - 直接粘贴/拖入图片，同样会在请求前翻译；
 - 让 Agent 分析工作区图片：`vision_glance <路径>`；
-- 让 Agent 分析工作区文档：`document_inspect <路径>`；支持 `docx/pptx/xlsx/pdf/md/markdown`；
+- 让 Agent 分析工作区文档：`document_inspect <路径>`；支持 `doc/docx/ppt/pptx/xls/xlsx/xmind/pdf/md/markdown`；
 - 询问图片元素位置：`vision_ground <路径>`，例如“红色按钮位于哪里？”；
 - 按图还原 UI：`vision_restore_ui <路径>`，成功后可让 DeepSeek 用 write 工具保存为 `restored-ui.html`；
 - 设置页中的 API Key 是只写字段，保存后不会回显。
@@ -138,7 +143,7 @@ dsh-sfversion/
 ├── lib/
 │   ├── index.js      # 宿主插件：visionTranslation、视觉工具、缓存
 │   ├── client.js     # 浏览器插件 bundle：上传按钮、状态条、设置页
-│   └── document.js   # DOCX/PPTX/XLSX/PDF/Markdown 解析与位置锚点
+│   └── document.js   # DOC/DOCX/PPT/PPTX/XLS/XLSX/XMind/PDF/Markdown 解析与位置锚点
 ├── cordis.patch.yml
 └── package.json
 ```
