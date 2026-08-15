@@ -1,2 +1,4 @@
 # 本地开发文档,仅保留在本机,不推送到 GitHub
 DEVELOPER.md
+
+node_modules/

@@ -2,17 +2,41 @@
 
 # dsh-sfversion
 
-**SF视觉桥** 为纯文本模型接入按需多模态能力：图片先交给视觉模型，再把结构化结果注入 DeepSeek Harness。普通图片不会默认生成 HTML，系统会根据用户问题自动选择描述/OCR、空间定位或 UI 还原。
+**SF视觉桥** 为纯文本模型接入按需多模态能力：图片或文档先经过结构化解析，再把结果注入 DeepSeek Harness。普通图片不会默认生成 HTML，系统会根据用户问题自动选择描述/OCR、空间定位或 UI 还原；文档会把原文文字和内嵌图片分层处理，并保留页码、段落、幻灯片、Sheet、单元格和坐标锚点。
 
 ## 特性
 
+- **图片与文档上传**：输入框左侧 ↑ 支持 png/jpeg/webp/gif 图片和 docx/pptx/xlsx/pdf/md/markdown 文档；图片走原生附件，文档以受控传输标记进入宿主后解析；
 - **原生图片体验**：输入框左侧 ↑ 按钮把图片作为原生草稿附件加入输入框，与文字一起发送；直接粘贴/拖入图片也支持；
 - **按意图识别**：普通问题使用描述/OCR；出现“哪里、位置、左上、附近、坐标”等空间问题时使用独立定位链路；明确要求网页、HTML、UI 复刻时才生成 HTML；
 - **空间定位**：`vision_ground` 返回目标 `bbox`、中心点、0～1000 归一化坐标、九宫格区域、OCR 文字和相对关系，适合复杂图片中的“某元素大概在哪里”；
 - **UI 还原**：`vision_restore_ui` 输出内联 CSS、无外部资源的完整 HTML；要求从 `<!DOCTYPE html>` 开始并以 `</html>` 结束，不完整结果不会写入缓存；
-- **模型工具**：`vision_glance`（描述/OCR）、`vision_ground`（空间定位）、`vision_restore_ui`（HTML 还原）；
+- **模型工具**：`vision_glance`（描述/OCR）、`vision_ground`（空间定位）、`vision_restore_ui`（HTML 还原）、`document_inspect`（文档结构化解析）；
 - **可靠缓存**：按图片内容、识别模式、模型、问题、接口地址和缓存版本隔离，避免更换模型/API 后复用旧结果；
+- **文档空间上下文**：原文文字、图片 OCR、彩色图片描述分别放入明确区块；PPTX 使用形状坐标，XLSX 使用单元格/图片范围，PDF 使用页码和文字坐标，DOCX/Markdown 在无法得到真实像素坐标时明确标注精度，不伪造位置；
+- **文档图片分流**：文字型图片优先 OCR；彩色/混合图片输出详细描述并保留 OCR；图片 OCR 明确标注为图片内容，不会覆盖正文；
 - **稳健性**：处理 429/5xx/网络抖动自动重试；识别 `finish_reason=length`，拒绝缓存被截断的结果；大图在浏览器端自动压缩。
+
+## 文档上传与处理
+
+点击输入框左侧 **↑** 后可选择以下格式：
+
+| 格式 | 原文文字 | 内嵌图片 | 位置精度 |
+|---|---|---|---|
+| `.docx` | 段落、表格单元格 | `word/media` 图片 | 段落/表格锚点；DOCX XML 本身不保证真实分页 |
+| `.pptx` | 文本框、形状文字 | 幻灯片图片 | 幻灯片 + 0～1000 归一化形状坐标 |
+| `.xlsx` | Sheet、单元格、共享字符串 | drawing 图片 | Sheet + 单元格/图片覆盖范围 |
+| `.pdf` | PDF.js 文字层（含页码和文字 bbox） | 可提取的嵌入式栅格图片会转为 PNG；扫描整页仍依赖渲染适配器 | 页码/文字/嵌入图片 bbox；扫描页会保留“无文字层”提示 |
+| `.md` / `.markdown` | Markdown 原文、标题、列表、代码块 | `data:image/...` 图片；相对路径图片当前保留引用 | 行号/文档顺序 |
+
+处理时不会把文档简单拼成一段无序文本，而是生成四层上下文：
+
+1. **原文文本层**：可提取的正文直接交给 DeepSeek，不先让视觉模型重新识别；
+2. **图片内容层**：每张图片有唯一 ID，文字型图片保留 OCR，彩色/混合图片由视觉模型生成详细描述并保留 OCR；
+3. **位置层**：每个文字块和图片都带页码、段落、幻灯片、Sheet、单元格、图片范围或 bbox；
+4. **位置约束**：明确告诉 DeepSeek 图片 OCR 不是正文，禁止跨页/跨图片/跨 Sheet 混合内容。
+
+客户端目前的宿主输入契约只提供原生图片附件接口，因此文档会先以受控的 `SFV_DOCUMENT_V1` 传输块进入宿主；宿主解析后会在发送给 DeepSeek 前移除该传输块，不会把 base64 当成用户问题。单个文档限制为 **25MB**。PDF 中可直接提取的嵌入式栅格图片会单独送入图片识别链路；整页扫描 PDF 没有文字层，也没有可分离的图片对象时，仍需在部署环境提供 PDF 页面渲染/OCR 适配器。普通 PDF 文字层不需要视觉模型。
 
 ## 为什么不再为每张图片生成 HTML
 
@@ -45,13 +69,13 @@
 ## 思考链路
 
 ```
-用户上传/粘贴图片
+用户上传/粘贴图片或文档
       │
       ▼
-原生图片消息（聊天里继续显示原图）
+原生图片消息 / 文档传输块
       │
       ▼  模型请求前的 visionTranslation
-按问题选择：describe / ground / restore_ui
+按问题选择：describe / ground / restore_ui；文档走 text-layer + document-image 分层
       │
       ▼
 描述、空间 JSON 或完整 HTML 注入 DeepSeek 上下文
@@ -90,6 +114,7 @@
 - 点 ↑ 选图，输入问题后发送；系统会根据问题自动选择识别模式；
 - 直接粘贴/拖入图片，同样会在请求前翻译；
 - 让 Agent 分析工作区图片：`vision_glance <路径>`；
+- 让 Agent 分析工作区文档：`document_inspect <路径>`；支持 `docx/pptx/xlsx/pdf/md/markdown`；
 - 询问图片元素位置：`vision_ground <路径>`，例如“红色按钮位于哪里？”；
 - 按图还原 UI：`vision_restore_ui <路径>`，成功后可让 DeepSeek 用 write 工具保存为 `restored-ui.html`；
 - 设置页中的 API Key 是只写字段，保存后不会回显。
@@ -111,8 +136,9 @@
 ```
 dsh-sfversion/
 ├── lib/
-│   ├── index.js      # 宿主插件：visionTranslation、三个视觉工具、缓存
-│   └── client.js     # 浏览器插件 bundle：上传按钮、状态条、设置页
+│   ├── index.js      # 宿主插件：visionTranslation、视觉工具、缓存
+│   ├── client.js     # 浏览器插件 bundle：上传按钮、状态条、设置页
+│   └── document.js   # DOCX/PPTX/XLSX/PDF/Markdown 解析与位置锚点
 ├── cordis.patch.yml
 └── package.json
 ```
@@ -121,6 +147,7 @@ dsh-sfversion/
 
 - DeepSeek Harness Web（或会消费 `visionTranslation` 的组合）；
 - Node.js ≥ 18（宿主使用全局 fetch）；
+- 运行时依赖 `fflate`（Office ZIP/XML 解包）和 `pdfjs-dist`（PDF 文字层解析）；
 - 有效的 StepFun 或兼容 OpenAI Chat Completions 的多模态 API Key。
 
 ## License
