@@ -1,7 +1,7 @@
 {
   "name": "dsh-sfversion",
-  "version": "1.0.1",
-  "description": "StepFun 视觉桥(step-3.7-flash):给纯文本模型装上眼睛——图片描述 + UI 还原,原生图片消息自动翻译",
+  "version": "1.1.0",
+  "description": "按需视觉桥：图片描述、空间定位与 UI 还原，支持 OpenAI Chat Completions 兼容多模态接口",
   "keywords": [
     "deepseek-harness",
     "dsh-plugin",
