@@ -50,6 +50,12 @@ https://github.com/sparkmio/dsh-sfversion
 
 文档上传后，输入框只保留一个文件引用占位符并显示文件名 chip；原始字节只保存在当前浏览器内存，发送时由输入引用 serializer 通过一次宿主 Connection RPC 交给解析器，文字和图片上下文随后才发给 DeepSeek。因此不会再把 `[[SFV_DOCUMENT_V1 ...]]` 或 Base64 填进输入框，也不会让 Base64 进入会话历史。旧版客户端/已有历史中的 `SFV_DOCUMENT_V1` 仍保留兼容解析。单个文档限制为 **25MB**。PDF 中可直接提取的嵌入式栅格图片会单独送入图片识别链路；整页扫描 PDF 没有文字层，也没有可分离的图片对象时，仍需在部署环境提供 PDF 页面渲染/OCR 适配器。普通 PDF 文字层不需要视觉模型。
 
+### 出现“当前 DSH 输入引用接口不可用”怎么办
+
+这个提示通常不是文档格式或文件内容错误，而是旧版本实现只从上传按钮的 `props.inputActions` 读取输入操作。上传按钮位于 `conversation.input.left/dock` 槽位时，DSH 不保证把 composer 组件树里的 props 自动注入进来，于是旧实现会误判为“接口不可用”。
+
+当前版本优先通过 DSH 公开的会话输入 facade（`conversation.input.for(sessionCtx)`）完成文档引用和图片附件写入，并保留旧版输入引用事件作为兼容回退；文档原始字节不会回退写入输入框。升级插件后请**完全重启 DSH Web**，避免浏览器继续使用旧的 `lib/client.js` 缓存。如果升级后仍提示该错误，说明当前 DSH 版本没有公开会话输入 facade 或输入引用能力，需要升级 DSH，而不是重复上传文件。
+
 ## 为什么不再为每张图片生成 HTML
 
 完整 HTML 往往比描述或定位结果长很多，容易触发视觉模型输出上限，并且会把大量无关内容塞进 DeepSeek 上下文。现在普通图片只做必要的识别：
