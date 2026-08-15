@@ -60,6 +60,7 @@
     "xlsx": "^0.18.5"
   },
   "scripts": {
-    "test": "node test/document.test.js"
+    "test": "node test/document.test.js && node test/release-notes.test.js",
+    "release:notes": "node scripts/release-notes.mjs"
   }
 }

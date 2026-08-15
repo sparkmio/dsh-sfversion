@@ -35,7 +35,7 @@ https://github.com/sparkmio/dsh-sfversion
 | `.pptx` | 文本框、形状文字 | 幻灯片图片 | 幻灯片 + 0～1000 归一化形状坐标 |
 | `.xls` | Sheet、单元格、公式 | 旧版 XLS 内嵌图片不保证可靠提取 | Sheet + 单元格 |
 | `.xlsx` | Sheet、单元格、共享字符串 | drawing 图片 | Sheet + 单元格/图片覆盖范围 |
-| `.pdf` | PDF.js 文字层（含页码和文字 bbox） | 可提取的嵌入式栅格图片会转为 PNG；扫描整页仍依赖渲染适配器 | 页码/文字/嵌入图片 bbox；扫描页会保留“无文字层”提示 |
+| `.pdf` | PDF.js 文字层（含页码和文字 bbox） | 可提取的嵌入式栅格图片会转为 PNG；无文字层的扫描页由内置渲染器转为 PNG | 页码/文字/嵌入图片 bbox；扫描页会保留“无文字层”提示 |
 | `.xmind` | `content.json` / `content.xml` 主题、备注 | 过滤 `attachments/`、缩略图等资源，避免误当正文 | 主题树路径，例如“中心主题 > 分支” |
 | `.md` / `.markdown` | Markdown 原文、标题、列表、代码块 | `data:image/...` 图片；相对路径图片当前保留引用 | 行号/文档顺序 |
 
@@ -49,6 +49,10 @@ https://github.com/sparkmio/dsh-sfversion
 4. **位置约束**：明确告诉 DeepSeek 图片 OCR 不是正文，禁止跨页/跨图片/跨 Sheet 混合内容。
 
 文档上传后，输入框只保留一个文件引用占位符并显示文件名 chip；原始字节只保存在当前浏览器内存，发送时由输入引用 serializer 通过一次宿主 Connection RPC 交给解析器，文字和图片上下文随后才发给 DeepSeek。因此不会再把 `[[SFV_DOCUMENT_V1 ...]]` 或 Base64 填进输入框，也不会让 Base64 进入会话历史。旧版客户端/已有历史中的 `SFV_DOCUMENT_V1` 仍保留兼容解析。单个文档限制为 **25MB**，最多分析 32 张内嵌图片，过长上下文会明确截断并提示分段上传。PDF.js 会提取文字层和可访问的嵌入式栅格图片；图片会单独送入图片识别链路。整页扫描 PDF 没有文字层且没有可分离的图片对象时，插件会自动用内置页面渲染器把页面转成 PNG，再交给已配置的视觉模型做 OCR/内容识别，不需要用户手动安装 OCR 服务或提供工作区文件路径。普通 PDF 文字层不需要视觉模型。
+
+### 发布
+
+项目使用 GitHub Actions 自动发布。将版本写入 `package.json` 后提交并推送，再创建并推送对应的 `vX.Y.Z` tag（例如 `v1.2.1`），发布管线会校验版本、运行测试、由 `scripts/release-notes.mjs` 按 Conventional Commits 生成更新日志，并创建 GitHub Release。无需手动编写 changelog；本地可用 `npm run release:notes -- --from <旧 tag> --to HEAD` 预览日志。
 
 ### 出现“当前 DSH 输入引用接口不可用”怎么办
 
