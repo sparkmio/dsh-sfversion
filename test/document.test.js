@@ -4,7 +4,7 @@ import { deflateSync } from 'node:zlib'
 import { zipSync, strToU8 } from 'fflate'
 import * as XLSX from 'xlsx'
 import { documentType, supportedDocument, parseDocument } from '../lib/document.js'
-import { classifyVisionMode } from '../lib/index.js'
+import { classifyVisionMode } from '../lib/vision-mode.js'
 
 const bytes = (value) => new TextEncoder().encode(value)
 
@@ -81,8 +81,8 @@ function makeScanPdf() {
 const scanPdfDoc = await parseDocument({ bytes: makeScanPdf(), name: 'scanned.pdf' })
 const renderedScanPage = scanPdfDoc.blocks.some((block) => block.type === 'image' && block.source === 'pdf-rendered-page' && block.location.kind === 'pdf-rendered-page' && block.bytes.length > 100)
 const scanNotice = scanPdfDoc.blocks.find((block) => block.type === 'text' && block.text.includes('没有文字层'))
-assert.ok(renderedScanPage || scanNotice?.text.includes('整页渲染失败'))
-if (renderedScanPage) assert.ok(scanNotice?.text.includes('已自动渲染整页'))
+assert.ok(renderedScanPage, '扫描 PDF 必须自动渲染为 PNG 页面')
+assert.ok(scanNotice?.text.includes('已自动渲染整页'))
 
 assert.deepEqual(classifyVisionMode('网页中红色按钮在哪里'), { describe: false, ground: true, restore: false })
 assert.deepEqual(classifyVisionMode('请还原这个网页'), { describe: true, ground: false, restore: true })
