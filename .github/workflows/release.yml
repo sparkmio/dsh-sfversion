@@ -31,6 +31,31 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci --legacy-peer-deps --registry=https://registry.npmjs.org --ignore-scripts --no-audit --no-fund || npm install --legacy-peer-deps --package-lock=false --registry=https://registry.npmjs.org --ignore-scripts --no-audit --no-fund
+          # --legacy-peer-deps above deliberately skips peer dependencies. The
+          # stream-contract test imports the plugin entry, so stage just its
+          # published Harness runtime graph in an isolated manifest, then merge it.
+          mkdir -p .ci-runtime
+          cat > .ci-runtime/package.json <<'JSON'
+          {
+            "private": true,
+            "dependencies": {
+              "@deepseek-ai/cordis": "^4.0.1-rc.1",
+              "@deepseek-ai/dsh-brand": "^0.0.1-rc.1",
+              "@deepseek-ai/dsh-code-runtime": "^0.0.1-rc.1",
+              "@deepseek-ai/dsh-invariants": "^0.0.1-rc.1",
+              "@deepseek-ai/dsh-llm": "^0.0.1-rc.1",
+              "@deepseek-ai/dsh-scope": "^0.0.1-rc.1",
+              "@deepseek-ai/dsh-session": "^0.0.1-rc.1",
+              "@deepseek-ai/dsh-settings": "^0.0.1-rc.1",
+              "@deepseek-ai/dsh-timeout": "^0.0.1-rc.1",
+              "@deepseek-ai/dsh-tools": "^0.0.1-rc.1",
+              "@deepseek-ai/schemastery": "^3.18.1-rc.1",
+              "react": "^18.2.0"
+            }
+          }
+          JSON
+          npm install --prefix .ci-runtime --legacy-peer-deps --package-lock=false --registry=https://registry.npmjs.org --no-audit --no-fund
+          cp -a .ci-runtime/node_modules/. node_modules/
           npm install --no-save --legacy-peer-deps --registry=https://registry.npmjs.org @napi-rs/canvas-linux-x64-gnu@1.0.6
 
       - name: Validate tag version
@@ -71,4 +96,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" --verify-tag --title "dsh-sfversion ${RELEASE_TAG}" --notes-file release-notes.md
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            # A retagged release keeps the notes explicitly generated for that release.
+            gh release edit "$RELEASE_TAG" --title "dsh-sfversion ${RELEASE_TAG}"
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --title "dsh-sfversion ${RELEASE_TAG}" --notes-file release-notes.md
+          fi
