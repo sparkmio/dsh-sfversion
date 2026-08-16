@@ -15,11 +15,13 @@ assert.deepEqual(limited, [0, 1, 2, 3, 4, 5, 6, 7])
 assert.equal(peak, 3, '视觉请求必须受并发上限约束')
 
 const listeners = new Map()
+let sfvRpcHandler
 const ctx = {
   settings: { register() { return { get: () => ({}) } } },
   tools: { register() {} },
   provide() {},
   logger: { info() {} },
+  connection: { rpc: { handle(path, handler) { if (path === '/sfv') sfvRpcHandler = handler } } },
   on(name, listener) { listeners.set(name, listener) },
 }
 
@@ -49,5 +51,42 @@ assert.equal(withDocument instanceof Promise, false, 'llm/stream 有文档时也
 assert.equal(typeof withDocument[Symbol.asyncIterator], 'function')
 const documentChunks = await readAll(withDocument)
 assert.equal(documentChunks.at(-1)?.text, 'downstream-ok', '文档展开后仍必须 yield* 下游流')
+
+assert.equal(typeof sfvRpcHandler, 'function', '文档上传 RPC 必须已注册')
+const attached = await sfvRpcHandler('attach', {
+  name: 'codex-guide.md',
+  mime: 'text/markdown',
+  base64: Buffer.from('# Codex API Key\n在设置页配置 API Key。').toString('base64'),
+})
+assert.equal(attached?.ok, true)
+const marker = attached.value.marker
+let receivedOptions
+function captureDownstream(options) {
+  receivedOptions = options
+  return downstream()
+}
+const stringContent = `根据这份文档说明如何配置 key：${marker}`
+const stringStream = streamListener({ messages: [{ role: 'user', content: stringContent }] }, captureDownstream)
+assert.equal(stringStream instanceof Promise, false, '字符串 content 的文档消息也必须同步返回 AsyncIterable')
+await readAll(stringStream)
+assert.ok(Array.isArray(receivedOptions?.messages?.[0]?.content), '字符串 content 的附件标记必须在 llm/stream 展开为内容块')
+const injectedText = receivedOptions.messages[0].content.map((block) => block?.text || '').join('\n')
+assert.match(injectedText, /Codex API Key/)
+assert.match(injectedText, /设置页配置 API Key/)
+assert.equal(injectedText.includes(marker), false, '隐藏附件标记不得进入下游模型消息')
+
+const secondAttached = await sfvRpcHandler('attach', {
+  name: 'second-guide.md',
+  mime: 'text/markdown',
+  base64: Buffer.from('# 第二份说明\n第二份文档也必须注入。').toString('base64'),
+})
+assert.equal(secondAttached?.ok, true)
+const secondMarker = secondAttached.value.marker
+const multipleStream = streamListener({ messages: [{ role: 'user', content: `请对比两份资料：${marker} 然后：${secondMarker}` }] }, captureDownstream)
+await readAll(multipleStream)
+const multipleText = receivedOptions.messages[0].content.map((block) => block?.text || '').join('\n')
+assert.match(multipleText, /Codex API Key/)
+assert.match(multipleText, /第二份说明/)
+assert.equal(multipleText.includes(marker) || multipleText.includes(secondMarker), false, '多个隐藏附件标记都不得进入下游模型消息')
 
 console.log('llm/stream contract regression test passed')
