@@ -31,6 +31,10 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci --legacy-peer-deps --registry=https://registry.npmjs.org --ignore-scripts --no-audit --no-fund || npm install --legacy-peer-deps --package-lock=false --registry=https://registry.npmjs.org --ignore-scripts --no-audit --no-fund
+          # Install the optional native Canvas binary before staging test-only
+          # Harness peers. A root npm install run afterwards prunes the staged
+          # peer packages because they are intentionally not package deps.
+          npm install --no-save --legacy-peer-deps --registry=https://registry.npmjs.org @napi-rs/canvas-linux-x64-gnu@1.0.6
           # --legacy-peer-deps above deliberately skips peer dependencies. The
           # stream-contract test imports the plugin entry, so stage just its
           # published Harness runtime graph in an isolated manifest, then merge it.
@@ -56,7 +60,6 @@ jobs:
           JSON
           npm install --prefix .ci-runtime --legacy-peer-deps --package-lock=false --registry=https://registry.npmjs.org --no-audit --no-fund
           cp -a .ci-runtime/node_modules/. node_modules/
-          npm install --no-save --legacy-peer-deps --registry=https://registry.npmjs.org @napi-rs/canvas-linux-x64-gnu@1.0.6
 
       - name: Validate tag version
         shell: bash
