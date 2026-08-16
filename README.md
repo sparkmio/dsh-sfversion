@@ -13,7 +13,7 @@ https://github.com/sparkmio/dsh-sfversion
 
 ## 特性
 
-- **图片与文档上传**：输入框左侧 ↑ 支持 png/jpeg/webp/gif 图片和 doc/docx/ppt/pptx/xls/xlsx/xmind/pdf/md/markdown 文档；图片走原生附件；文档走短文件引用和宿主 RPC 解析，聊天消息只显示文件名，不显示解析提示词；
+- **图片与文档上传**：输入框左侧 ↑ 支持 png/jpeg/webp/gif 图片和 doc/docx/ppt/pptx/xls/xlsx/xmind/pdf/md/markdown 文档；图片走原生附件；文档走 DSH 原生引用 chip、短标签和宿主 RPC 解析，不显示内部 URI、解析提示词或 Base64；
 - **原生图片体验**：输入框左侧 ↑ 按钮把图片作为原生草稿附件加入输入框，与文字一起发送；直接粘贴/拖入图片也支持；
 - **按意图识别**：普通问题使用描述/OCR；出现“哪里、位置、左上、附近、坐标”等空间问题时使用独立定位链路；明确要求网页、HTML、UI 复刻时才生成 HTML；
 - **空间定位**：`vision_ground` 返回目标 `bbox`、中心点、0～1000 归一化坐标、九宫格区域、OCR 文字和相对关系，适合复杂图片中的“某元素大概在哪里”；
@@ -48,11 +48,34 @@ https://github.com/sparkmio/dsh-sfversion
 3. **位置层**：每个文字块和图片都带页码、段落、幻灯片、Sheet、单元格、图片范围或 bbox；
 4. **位置约束**：明确告诉 DeepSeek 图片 OCR 不是正文，禁止跨页/跨图片/跨 Sheet 混合内容。
 
-文档上传后，输入框只保留一个文件引用占位符并显示文件名 chip；原始字节只在发送时经宿主 Connection RPC 放入短期内存，输入引用 serializer 返回一个只显示文件名的短文件链接，模型调用前再由宿主翻译层展开文档内容。因此不会把解析提示词、`[[SFV_DOCUMENT_V1 ...]]` 或 Base64 显示到聊天消息中，也不会让原始 Base64 进入会话历史。由于当前 DSH prompt wire 对非图片文件没有原生 attachment 类型，这是兼容现有 DSH 的安全后备链路；图片仍使用原生附件。旧版客户端/已有历史中的 `SFV_DOCUMENT_V1` 仍保留兼容解析。单个文档限制为 **25MB**，最多分析 32 张内嵌图片，过长上下文会明确截断并提示分段上传。PDF.js 会提取文字层和可访问的嵌入式栅格图片；图片会单独送入图片识别链路。整页扫描 PDF 没有文字层且没有可分离的图片对象时，插件会自动用内置页面渲染器把页面转成 PNG，再交给已配置的视觉模型做 OCR/内容识别，不需要用户手动安装 OCR 服务或提供工作区文件路径。普通 PDF 文字层不需要视觉模型。
+文档上传后，输入框使用 DSH 原生的引用 chip 显示文件名；原始字节只在发送时经宿主 Connection RPC 放入短期内存，输入引用 serializer 只返回不含 URI 的短标签 `[📎 文件名]`，模型调用前再由宿主的 `llm/stream` 边界展开文档内容。因此不会把解析提示词、`[[SFV_DOCUMENT_V1 ...]]`、Base64 或 `sfv-document://...` URI 显示给用户，也不会让原始 Base64 进入会话历史。由于当前 DSH prompt wire 对非图片文件没有通用的原生 file attachment 类型，这是兼容现有 DSH 的安全后备链路；图片仍使用原生附件。旧版客户端/已有历史中的 `SFV_DOCUMENT_V1` 和旧 URI 引用仍保留兼容解析。单个文档限制为 **25MB**，最多分析 32 张内嵌图片，过长上下文会明确截断并提示分段上传。PDF.js 会提取文字层和可访问的嵌入式栅格图片；图片会单独送入图片识别链路。整页扫描 PDF 没有文字层且没有可分离的图片对象时，插件会自动用内置页面渲染器把页面转成 PNG，再交给已配置的视觉模型做 OCR/内容识别，不需要用户手动安装 OCR 服务或提供工作区文件路径。普通 PDF 文字层不需要视觉模型。
 
 ### 发布
 
 项目使用 GitHub Actions 自动发布。将版本写入 `package.json` 后提交并推送，再创建并推送对应的 `vX.Y.Z` tag（例如 `v1.2.1`），发布管线会校验版本、运行测试、由 `scripts/release-notes.mjs` 按 Conventional Commits 生成更新日志，并创建 GitHub Release。无需手动编写 changelog；本地可用 `npm run release:notes -- --from <旧 tag> --to HEAD` 预览日志。
+
+## 引用与参考项目
+
+本项目的代码、文档解析和发布脚本均维护在当前仓库中；下面区分**直接使用的依赖/平台接口**与**设计参考**，避免把参考项目误认为运行时必需项。
+
+### 直接使用的依赖与平台接口
+
+- **DeepSeek Harness / Cordis**：插件宿主、生命周期、设置、工具注册、`llm/stream` 模型请求边界以及客户端会话输入 facade。
+- **`@deepseek-ai/dsh-client-ui-input-trigger`**：注册文档引用 source、维护输入框引用 chip，并在发送时调用引用 codec。
+- **`@deepseek-ai/dsh-attachment` / `@deepseek-ai/dsh-client-ui-attachment`**：图片附件的 DSH 原生附件协议；本插件只将图片接入这条原生链路。
+- **`pdfjs-dist`**：PDF 文字层、页码、文字 bbox 和页面渲染后备链路。
+- **`xlsx`**：XLS/XLSX 工作簿、Sheet、单元格及图片关系解析。
+- **`fflate`**：DOCX/PPTX/XLSX/XMind 等 ZIP/XML 容器解包。
+- **`word-extractor`、`cfb`**：旧版二进制 DOC/XLS 等格式的兼容解析。
+- **`@napi-rs/canvas`**：PDF 扫描页的 PNG 页面渲染后备。
+- **StepFun / OpenAI Chat Completions 兼容接口**：视觉识别请求的外部模型接口，不是本项目内置的模型。
+
+### 设计参考
+
+- **`dsh-vision-toolkit`**：参考其在 DeepSeek Harness 中组织视觉能力、工具入口和模型适配的思路；本项目针对文档结构化解析、PDF 页面渲染和引用安全链路独立实现。
+- **DeepSeek Harness 自带的图片输入实现**：参考其原生图片草稿附件和输入引用 chip 的交互方式；非图片文档没有伪造 `{type: 'file'}`，而是使用短标签 + 宿主内存 + 模型边界展开。
+
+参考项目仅用于架构和交互设计，不会在安装时额外拉取；运行所需版本以 `package.json` 和当前 DSH 环境为准。
 
 ### 出现“当前 DSH 输入引用接口不可用”怎么办
 
@@ -94,9 +117,9 @@ https://github.com/sparkmio/dsh-sfversion
 用户上传/粘贴图片或文档
       │
       ▼
-原生图片消息 / 文档传输块
+原生图片消息 / 文档短引用
       │
-      ▼  模型请求前的 visionTranslation
+      ▼  模型请求前的 llm/stream 文档展开（图片仍走 visionTranslation）
 按问题选择：describe / ground / restore_ui；文档走 text-layer + document-image 分层
       │
       ▼
