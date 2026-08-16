@@ -134,6 +134,8 @@ https://github.com/sparkmio/dsh-sfversion
 描述、空间 JSON 或完整 HTML 注入 DeepSeek 上下文
 ```
 
+`llm/stream` 监听器遵循 Harness waterfall 契约，必须同步返回 `AsyncIterable`；文档解析延迟到该流开始迭代后异步执行，避免把 `Promise` 返回给下游的 `yield* next()` 链路。
+
 ## 安装
 
 1. 把本目录安装为 dsh profile 可解析的包（任选其一）：
