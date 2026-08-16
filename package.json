@@ -22,6 +22,7 @@
     "lib/index.js",
     "lib/client.js",
     "lib/document.js",
+    "lib/document-reference.js",
     "cordis.patch.yml",
     "README.md"
   ],
@@ -31,8 +32,7 @@
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-theme",
         "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-connection",
-        "@deepseek-ai/dsh-client-ui-input-trigger"
+        "@deepseek-ai/dsh-client-connection"
       ],
       "platform": "web"
     }
@@ -48,8 +48,7 @@
     "@deepseek-ai/dsh-tools": "*",
     "@deepseek-ai/schemastery": "*",
     "react": "^18.2.0",
-    "@deepseek-ai/dsh-client-connection": "*",
-    "@deepseek-ai/dsh-client-ui-input-trigger": "*"
+    "@deepseek-ai/dsh-client-connection": "*"
   },
   "dependencies": {
     "@napi-rs/canvas": "1.0.6",
