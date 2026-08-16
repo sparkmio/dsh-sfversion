@@ -4,8 +4,8 @@ import { deflateSync } from 'node:zlib'
 import { zipSync, strToU8 } from 'fflate'
 import * as XLSX from 'xlsx'
 import { documentType, supportedDocument, parseDocument } from '../lib/document.js'
-import { classifyVisionMode } from '../lib/vision-mode.js'
-import { ZERO_WIDTH_ALPHABET, ZERO_WIDTH_START, ZERO_WIDTH_END, documentReferenceMarker, parseDocumentReference } from '../lib/document-reference.js'
+import { classifyVisionMode, isStorySummaryQuery } from '../lib/vision-mode.js'
+import { ZERO_WIDTH_ALPHABET, ZERO_WIDTH_START, ZERO_WIDTH_END, documentReferenceMarker, encodeZeroWidth, parseDocumentReference } from '../lib/document-reference.js'
 
 const bytes = (value) => new TextEncoder().encode(value)
 
@@ -88,6 +88,8 @@ assert.ok(scanNotice?.text.includes('已自动渲染整页'))
 assert.deepEqual(classifyVisionMode('网页中红色按钮在哪里'), { describe: false, ground: true, restore: false })
 assert.deepEqual(classifyVisionMode('请还原这个网页'), { describe: true, ground: false, restore: true })
 assert.deepEqual(classifyVisionMode('红色按钮位于左上角吗'), { describe: false, ground: true, restore: false })
+assert.equal(isStorySummaryQuery('这个漫画的这一章讲了什么'), true)
+assert.equal(isStorySummaryQuery('把按钮放在哪里'), false)
 
 const jsonXmind = zipSync({
   'content.json': strToU8(JSON.stringify({ sheets: [{ title: '产品', rootTopic: { title: '中心', children: { attached: [{ title: '需求', notes: { plain: { content: '备注内容' } } }] } } }] })),
@@ -117,8 +119,16 @@ assert.equal(marker.includes('README'), false)
 assert.equal(marker.includes('[📎'), false)
 const parsedMarker = parseDocumentReference(`请总结${marker}重点`)
 assert.equal(parsedMarker?.token, 'sfv-test-token')
+assert.equal(parsedMarker?.name, 'README (1).md')
+assert.equal(parsedMarker?.mime, '')
 assert.equal(parsedMarker?.before, '请总结')
 assert.equal(parsedMarker?.after, '重点')
+const richMarker = documentReferenceMarker('汇总报告.pdf', 'sfv-pdf-token', 'application/pdf')
+assert.equal(parseDocumentReference(richMarker)?.name, '汇总报告.pdf')
+assert.equal(parseDocumentReference(richMarker)?.mime, 'application/pdf')
+const legacyHiddenMarker = ZERO_WIDTH_START + encodeZeroWidth('sfv-legacy-token') + ZERO_WIDTH_END
+assert.equal(parseDocumentReference(legacyHiddenMarker)?.token, 'sfv-legacy-token')
+assert.equal(parseDocumentReference(legacyHiddenMarker)?.name, '')
 assert.equal(parseDocumentReference('[📎 README.md](sfv-document://legacy-token)')?.token, 'legacy-token')
 assert.equal(parseDocumentReference('[📎 README.md]')?.name, 'README.md')
 
@@ -131,7 +141,13 @@ assert.equal(client.includes('slash/input-insert-reference'), false)
 assert.equal(client.includes('sessionInput.insertReference'), false)
 assert.equal(client.includes('registerDocumentReferenceSource'), false)
 assert.ok(client.includes('.sfv-doc-card'))
+assert.ok(client.includes('.sfv-history-doc-card'))
 assert.ok(client.includes('function DocumentCard'))
+assert.ok(client.includes('function HistoryDocumentCard'))
+assert.ok(client.includes('documentAttachmentDefinition'))
+assert.ok(client.includes("key: 'dsh-sfversion-document-attachment'"))
+assert.ok(client.includes("conversationEvents.register(documentAttachmentDefinition)"))
+assert.ok(client.includes("'conversationEvents'"))
 assert.ok(client.includes('sessionInput.setDraft(draft.includes(marker) ? draft : draft + marker)'))
 assert.ok(client.includes('removeDocumentMarker'))
 assert.ok(client.includes("connection.rpc.call('/sfv', 'attach'"))
@@ -143,8 +159,14 @@ assert.ok(client.includes('sessionInput.addImages'))
 assert.ok(client.includes('inputActions.addImages([sendFile])'))
 assert.ok(host.includes("from './document-reference.js'"))
 assert.ok(host.includes("ctx.on('llm/stream'"))
+assert.ok(host.includes('maxVisionConcurrency: 3'))
+assert.ok(host.includes('summaryMaxTokens: 700'))
 assert.ok(host.includes('parseDocumentReference'))
+assert.ok(host.includes('documentReferenceMarker(name, token, mime)'))
 assert.ok(host.includes('SFV_DOCUMENT_V1'))
 assert.ok(reference.includes('ZERO_WIDTH_ALPHABET'))
 assert.ok(reference.includes('documentReferenceMarker'))
+assert.ok(reference.includes("JSON.stringify({ v: 2"))
+const manifest = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8'))
+assert.ok(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-conversation'))
 console.log('document smoke tests passed')

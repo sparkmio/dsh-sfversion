@@ -1,5 +1,18 @@
 import assert from 'node:assert/strict'
-import { apply } from '../lib/index.js'
+import { apply, createConcurrencyLimiter } from '../lib/index.js'
+
+const limiter = createConcurrencyLimiter(3)
+let active = 0
+let peak = 0
+const limited = await Promise.all(Array.from({ length: 8 }, (_, index) => limiter.run(async () => {
+  active++
+  peak = Math.max(peak, active)
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  active--
+  return index
+})))
+assert.deepEqual(limited, [0, 1, 2, 3, 4, 5, 6, 7])
+assert.equal(peak, 3, '视觉请求必须受并发上限约束')
 
 const listeners = new Map()
 const ctx = {
